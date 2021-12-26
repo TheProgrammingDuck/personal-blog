@@ -1,0 +1,18 @@
+{
+  "title": "Vishal Soomaney's Blog",
+  "author": "Vishal Soomaney",
+  "headerTitle": "VishBlog",
+  "description": "A blog created with Next.js and Tailwind.css",
+  "language": "en-us",
+  "siteUrl": "https://tailwind-nextjs-starter-blog.vercel.app",
+  "siteRepo": "https://github.com/timlrx/tailwind-nextjs-starter-blog",
+  "image": "/static/images/avatar.png",
+  "socialBanner": "/static/images/twitter-card.png",
+  "email": "soomaneysoftware@gmail.com",
+  "github": "https://github.com",
+  "twitter": "https://twitter.com/VSoomaney",
+  "facebook": "https://facebook.com",
+  "youtube": "https://youtube.com",
+  "linkedin": "https://www.linkedin.com/in/vsoomaney/",
+  "locale": "en-US"
+}

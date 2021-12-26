@@ -1,0 +1,145 @@
+---
+title: Authentication in Google Cloud Functions
+date: '2021-06-04'
+tags: ['cloud', 'cybersecurity', 'google']
+draft: false
+summary: 'Worried about cybersecurity? Learn how authentication setup works for Google Cloud Functions and its wider cybersecurity implications.'
+---
+
+# Introduction
+
+With the increasing occurrence of high-profile cybersecurity breaches such as those for JBS[1] and Colonial Pipeline[2], 
+security of public user data is arguably more important than ever. Most major breaches occur through human error such as through 
+accidental leakage of authentication details or through a vulnerability at a technology supplier (ie SolarWinds[3]).
+
+In this article I explore how authentication management works with Google Cloud Functions and how this can be utilised to achieve an effective
+balance of security and convenience.
+
+# Authentication Setup
+
+Authentication for Google Cloud Functions is handled through the **IAM** (Identity and Access Management)[4], Google describes this as 
+_"Fine-grained access control and visibility for centrally managing cloud resources"_.
+
+The authentication mechanism reminds me quite a bit to that OpenShift, it heavily involves **Service Accounts** and **Rolebindings**
+- The administrator can do anything to a cloud function, this includes creating, updating, and deleting them.
+- The administrator can add **'members'** to a function, these are identified by their user or service account email.
+- The administrator can create specific **'roles'** that define the actions that members/identities with the role are allowed to do[5].]
+    - Members/Identities can then be granted the appropriate IAM roles for specific functions/projects.
+    - The granted roles also define which _resources_ the member has access to (ie organisations, projects, Google Kubernetes Engine (GKE) clusters, and Cloud Storage buckets).
+
+## Granularity
+
+By default, permissions are provided at _function level_ however different permission granularity can be set up (ie at _project level_).
+
+You can also disable authentication requirements[6] when invoking specific functions or even when invoking any function for a given project,
+this is **strongly inadvised** however and should only be done when running quick tests for test functionality that has no access to real data.
+
+# HTTP Function Invocation
+
+- By default, all HTTP Cloud Functions have an automatically provisioned TLS certificate so secure connections can be established.
+- By default, all HTTP functions require for the invokers to be authenticated.
+- Unauthenticated functions can be set up for debugging and fast testing/iteration purposes by using the _'--allow-unauthenticated'_ flag[7].
+    - Only the members with the **Owner** and **Cloud Functions Admin** roles can set the flag.
+    - Once the flag is set, the **'call'** CLI command can be used to directly invoke a function[8].
+    - The 'call' command lets you directly supply data as the body/payload of a POST REST request to the function so that you can review the function's behaviour.
+    - To ensure that user data remains secure, Google Cloud ensures there is an _un-overrideable quota_ on how many unauthorised requests can be done per month. This helps ensure the feature
+    is _not_ used in production[9].
+- CORS is managed by https://cloud.google.com/functions/docs/writing/http#handling_cors_requests
+
+# Event-driven Function Invocation
+
+- Event-driven functions (also known as 'Background Functions') can only handle events triggered from within the Cloud Infrastructure or triggered manually.
+    - A cloud project has a distributed and automatically scalable Pub/Sub message bus. You can set up Pub/Sup topics for the project that functions can Publish/Subscribe to.
+- The payload of a message is stored as a base64-encoded string in the 'data' attribute of the message, this needs to be decoded prior to use.
+- By default, Background 'Functions acks incoming Pub/Sub messages internally upon function invocation'
+- The automated acknowledgements don't occur if automatic retrying of failed invocations is enabled.
+- There are 2 ways to manually trigger a Background Function:
+    - The Production way: Run a CURL or general HTTP POST request to _https://GCF_REGION-GCP_PROJECT_ID.cloudfunctions.net/publish_ with the event data as payload. 
+    This is fairly secure as the message is parsed, processed and published through function's in-build 'publish' function.
+    - The insecure Test/Debug method involving using the **gcloud functions call** command. This lets you use the _gcloud_ CLI to directly create and edit topics as well as deploy
+    and invoke functions[10]. 
+
+# IAM Details
+https://cloud.google.com/iam/docs/overview
+https://cloud.google.com/iam/docs/understanding-roles#prerequisite_for_this_guide 
+https://cloud.google.com/iam/docs/overview#cloud-iam-policy
+https://cloud.google.com/functions/docs/reference/iam/roles
+
+
+Types of role-bindings:
+
+This is the list of members bound a role.
+https://cloud.google.com/functions/docs/writing/background 
+
+IAM Policies:
+
+An IAM policy is a set of role-bindings attached to a resource. It's effectively a collection of all the access control defined for a resource. 
+An IAM Policy's controls/role-bindings apply hierarchically:
+    - The hierarchy is: _Organisation_ -> _Folders_ -> _Projects_ (can also be a direct child of an organisation) -> _Resources_ (for a service).
+    - Anything applied to a parent node applies to all its child nodes.
+
+# In-Built Cybersecurity Protections
+
+- Data is encrypted at rest (when stored at a Google Cloud facility). [Find Google's relevant white-paper here](https://cloud.google.com/security/encryption/default-encryption/)
+    - Stored data is split into chunks with each chunk being encrypted with a different unique encryption key.
+    - Encryption keys are exclusively stored in _Google's Key Manamagent Service_.
+    - Most data is encrypted using **AES256**.
+    - Encryption is consistently done using the **Tink** cryptographic library, code changes to this are tightly controlled.
+- Data is encrypted when in transit between Google facilities. [Find Google's relevant white-paper here](https://cloud.google.com/security/encryption-in-transit?skip_cache=true)
+    - When data is in transit within areas physically controlled by Google, data is authenticated but not always encrypted.
+    - When data is in transit through areas not physically controlled by Google, data is both authenticated and encrypted.
+    - Encryption is done at one or more network layers.
+    - Specific protections differ however some default protection involves using TLS encryption.
+    - Further in-transit encryption is available for specific use cases (ie SMTP servers). 
+- Compliance with both UK and US regulations such as HIPAA, GDPR, and CCPA is constantly and automatically kept without user involvement.[11]
+- Infrastructure is _'secure-by-design'_. This involves:
+    - In-built protections against denial of service attacks[12].
+        - A feature called _'Google Cloud Armor'_ comes integrated into the Cloud Load Balancing service. This can scale to absorb massive DDoS attacks.
+    - Infrastructure software is monitored for threats **24/7**.
+    - Data centers used include physical security such as _'safeguards 
+    like custom-designed electronic access cards, alarms, vehicle access barriers, 
+    perimeter fencing, metal detectors, and biometrics, and the data center floor features laser beam intrusion detection.'_[13].
+- Strong authentication requirements with Security Keys that have 2FA support.
+- No trust is assumed between deployed services, _Service, Machine and Employee Accounts_ and _Service Whitelists_ amongst others are used for approval. 
+This access restriction is automatically enforced, in effect a 'multi-tentant' model is followed.
+
+# Cybersecurity Implications For Users and Their Clients
+
+The straightforward yet detailed cybersecurity setup for Google Cloud Functions provides a good balance of security and data privacy whilst maintaining some convenience for the developer.
+
+That said, **both** the major previously detailed risks remain: 
+- Human error could cause Service Accounts to become leaked.
+- Vulnerabilities in third-party suppliers such as APIs, libraries, tools (automation, data visualisation) as well as malicious HTTP requests/events.
+
+Overall, usage of Google Cloud for data storage and code hosting heavily reduces suceptibility to major vulnerabilities and ensures all latest data security regulations are followed. However
+it is not a fool-proof measure and users need to follow cybersecurity best-practise and vet any third-party suppliers used to keep them and their clients secure.
+
+# Disclaimers
+
+- I do not currently and have never worked for Google or any of their subsidiaries.
+- I do not currently own any equity in Alphabet Inc.
+- None of the pages on this blog are paid/sponsored in any way.
+- My current role involves usage of Google Cloud Functions.
+
+# Learn More
+
+The Google Cloud documentation is very well written and quite comprehensive, a good starting point for further reading would be:
+[Google Cloud Function Security: Authentication](https://cloud.google.com/functions/docs/securing/authenticating)
+
+I'd also recommend reviewing Google Cloud's [Security Best Practise Guide](https://cloud.google.com/security/best-practices) and
+the [CISO's Guide to Security Transformation](https://services.google.com/fh/files/misc/ciso-guide-to-security-transformation.pdf).
+
+# References
+[1] https://www.theguardian.com/technology/2021/may/08/colonial-pipeline-cyber-attack-shutdown   
+[2] https://www.reuters.com/world/us/some-us-meat-plants-stop-operating-after-jbs-cyber-attack-2021-06-01/   
+[3] https://www.cisecurity.org/solarwinds/   
+[4] https://cloud.google.com/iam   
+[5] https://cloud.google.com/iam/docs/understanding-roles   
+[6] https://cloud.google.com/functions/docs/securing/managing-access-iam  
+[7] https://cloud.google.com/functions/docs/running/direct  
+[8] https://cloud.google.com/functions/docs/reference/rest/v1/projects.locations.functions/call  
+[9] https://cloud.google.com/functions/quotas  
+[10] https://cloud.google.com/functions/docs/calling/pubsub  
+[11] https://cloud.google.com/security  
+[12] https://cloud.google.com/security/infrastructure  
+[13] https://cloud.google.com/security/overview/whitepaper#operational_security
